@@ -1,0 +1,30 @@
+[project]
+name = "document-video-chat"
+version = "0.1.0"
+description = "Standalone agentic chat over PDF documents and video transcripts"
+requires-python = ">=3.11"
+dependencies = [
+  "fastapi>=0.115,<1",
+  "uvicorn[standard]>=0.30,<1",
+  "python-multipart>=0.0.9",
+  "pydantic-settings>=2.4,<3",
+  "sqlalchemy>=2.0,<3",
+  "langchain>=0.3,<1",
+  "langchain-openai>=0.3,<2",
+  "langchain-weaviate>=0.0.5",
+  "weaviate-client>=4.9,<5",
+  "pymupdf>=1.24",
+  "webvtt-py>=0.5",
+  "chonkie>=1.0",
+  "python-dotenv>=1.0",
+]
+
+[project.optional-dependencies]
+dev = ["pytest>=8", "httpx>=0.27", "ruff>=0.6"]
+
+[tool.ruff]
+line-length = 88
+target-version = "py311"
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
