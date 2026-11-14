@@ -1,23 +1,45 @@
 # LearnLens — Standalone PDF & Video RAG Chat
 
-Standalone extraction of the LearnLens PDF/video question-answering architecture. It retains the original parsing, chunking, embedding, Weaviate retrieval, LangChain AgentExecutor, Django ORM models, and Celery ingestion. The HTTP surface is intentionally reduced to one FastAPI chat router.
+A standalone PDF and video question-answering service. It keeps the original Marker/Chonkie PDF processing, WebVTT transcript processing, OpenAI embeddings, Weaviate retrieval, LangChain tool-calling AgentExecutor, Django ORM models, PostgreSQL persistence, and Celery ingestion.
 
-## Architecture
+The HTTP surface is intentionally small: one FastAPI chat router.
 
-- FastAPI: one `/api/v1/chat` endpoint.
-- PostgreSQL + Django ORM: Organization, Asset, TranscriptLine.
-- PDF: Marker JSON parsing, block-aware extraction, Chonkie SentenceChunker.
-- Video: WebVTT parsing, transcript persistence, time-window grouping, embedding-similarity boundary detection, character-based rechunking.
-- Embeddings: LangChain OpenAI embeddings.
-- Vector store: Weaviate with separate PDF and video collections.
-- Agent: LangChain tool-calling `AgentExecutor`, with PDF and transcript retrieval tools.
-- Chat memory: Redis-backed LangChain message history.
-- Ingestion: Celery PDF/video processing tasks.
+## System architecture
 
-LMS authentication, quizzes, LMS-specific fields, external status webhooks, and the original admin/router surface are excluded. Organization scoping and asset models remain.
+See the [complete system architecture](docs/architecture.md) for:
+- End-to-end system component diagram.
+- Basic RAG lifecycle.
+- PDF ingestion and chunking flow.
+- Video transcript ingestion and chunking flow.
+- Chat/AgentExecutor/retrieval sequence.
+- Weaviate, relational data model, and background processing.
+- Direct links to implementation files for each stage.
 
-## Run
+## Stack
 
-Start PostgreSQL, Weaviate, Redis, and RabbitMQ (RabbitMQ is required for Celery workers). Copy `.env.example` to `.env`, configure credentials, install with `uv sync`, initialize tables using `uv run python manage.py migrate --run-syncdb`, then start `uv run uvicorn app.main:app --reload`. API docs are at `/docs`.
+- FastAPI — chat API
+- Django ORM + PostgreSQL — organizations, assets, transcript lines
+- Marker + Chonkie — PDF parsing and sentence chunking
+- WebVTT — transcript parsing
+- LangChain + OpenAI — embeddings and tool-calling agent
+- Weaviate — PDF/video vector collections
+- Redis — conversation history
+- Celery + RabbitMQ — asynchronous ingestion
 
-Assets are created in PostgreSQL and then queued with `async_process_pdf_asset.delay(asset_id)` or `async_process_video_asset.delay(asset_id)`. Video assets require a VTT `captions_url`; speech-to-text is not included.
+## Run locally
+
+Start PostgreSQL, Weaviate, Redis, and RabbitMQ (RabbitMQ is required for Celery workers). Copy `.env.example` to `.env`, configure credentials, and install dependencies:
+
+```bash
+uv sync
+uv run python manage.py migrate --run-syncdb
+uv run uvicorn app.main:app --reload
+```
+
+API docs: http://localhost:8000/docs
+
+Assets must exist in PostgreSQL before ingestion is queued:
+- PDF: `async_process_pdf_asset.delay(asset_id)`
+- Video: `async_process_video_asset.delay(asset_id)`
+
+Video assets require a VTT `captions_url`. Raw-video speech recognition is not included.
