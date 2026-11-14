@@ -37,13 +37,13 @@ def _get_session_history(session_id: str) -> RedisChatMessageHistory:
 
 def _clean_agent_output(raw_output: str) -> tuple[str, bool]:
     include_citations = bool(
-        re.search(r"<include_citations:\\s*yes>", raw_output, re.IGNORECASE)
+        re.search(r"<include_citations:\s*yes>", raw_output, re.IGNORECASE)
     )
     answer = re.sub(
-        r"<include_citations:\\s*(yes|no)>", "", raw_output, flags=re.IGNORECASE
+        r"<include_citations:\s*(yes|no)>", "", raw_output, flags=re.IGNORECASE
     )
     answer = re.sub(
-        r"<query_classification:\\s*[^>]+>", "", answer, flags=re.IGNORECASE
+        r"<query_classification:\s*[^>]+>", "", answer, flags=re.IGNORECASE
     )
     return answer.strip(), include_citations
 
