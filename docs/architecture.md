@@ -10,7 +10,7 @@ The original LearnLens RAG pipeline is shown first to explain the core
 retrieval-augmented generation process before looking at the application
 architecture below.
 
-![LearnLens basic RAG pipeline](https://raw.githubusercontent.com/testpress/learnlens/main/docs/images/basic-rag-pipeline.webp)
+<img src="https://raw.githubusercontent.com/testpress/learnlens/main/docs/images/basic-rag-pipeline.webp" alt="Basic RAG Pipeline" width="100%" />
 
 The high-level flow is: extract content from a PDF or video transcript,
 split it into meaningful chunks, generate embeddings, store those vectors,
