@@ -116,7 +116,7 @@ def process_video_asset(asset: Asset) -> None:
         asset.update_total_chunks(len(chunks))
         store_video_transcript_chunks_in_vector_db(chunks, asset)
 
-        generate_notes(asset)
+        generate_notes(asset, upload=False)
 
         asset.mark_as_completed()
 
