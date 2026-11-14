@@ -21,26 +21,20 @@ transcription or store/play the original video.
 
 ## Architecture
 
-```text
-Client
-  |
-  v
-FastAPI routes
-  |-- asset upload + ingestion
-  |      |-- PDF parser / VTT parser
-  |      |-- chunking + embeddings
-  |      '-- Weaviate collections
-  |
-  '-- chat service
-         |-- conversation history (SQL database)
-         |-- LangChain tool-calling agent
-         |     |-- retrieve_from_pdf
-         |     '-- retrieve_from_transcript
-         '-- answer + source citations
-```
+See [the architecture and code map](docs/architecture.md). The documentation
+links directly to each implementation file on GitHub so the code can be
+opened while walking through the system.
 
-The HTTP layer, domain services, persistence, and vector-store adapter are
-separated so providers can be replaced without changing agent behavior.
+## Documentation
+
+- [Documentation index](docs/README.md)
+- [Architecture and code map](docs/architecture.md)
+- [PDF ingestion and retrieval](docs/pdf-pipeline.md)
+- [Video transcript ingestion and retrieval](docs/video-pipeline.md)
+- [Agent execution and chat lifecycle](docs/agent-and-chat.md)
+- [API reference](docs/api.md)
+- [Configuration and local setup](docs/setup.md)
+- [Five-minute technical walkthrough](docs/interview-walkthrough.md)
 
 ## Run locally
 
@@ -70,14 +64,6 @@ Pass `organization_id` and `user_id` on chat requests. Asset and chat
 queries are scoped to the organization and user; do not expose these
 identifiers as authorization by themselves in a public deployment. Add
 authentication and rate limiting at the API boundary before production use.
-
-## Agent behavior
-
-The agent has two retrieval tools. For PDF assets it can call
-`retrieve_from_pdf`, including optional page filters. For video assets it
-can call `retrieve_from_transcript`, including a point timestamp or a
-time interval. Whole-video questions can use the complete transcript as
-context. Answers are grounded in retrieved material and return citations.
 
 ## Configuration
 
