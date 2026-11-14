@@ -104,7 +104,7 @@ def process_video_asset(asset: Asset) -> None:
 
         local_vtt_path, should_cleanup_vtt = resolve_file_source_to_local_path(
             str(asset.captions_url),
-            use_settings_secret=True,
+            use_settings_secret=False,
         )
 
         create_transcript_lines_from_vtt(asset, vtt_source=local_vtt_path)
