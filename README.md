@@ -1,74 +1,23 @@
-# Document & Video Chat Assistant
+# LearnLens — Standalone PDF & Video RAG Chat
 
-A standalone FastAPI application for asking grounded questions about PDF
-documents and video transcripts. It uses a tool-calling LangChain agent:
-the model chooses the relevant retrieval tool, retrieves source material,
-and answers with citations.
-
-## Capabilities
-
-- Upload and ingest PDF documents.
-- Ingest WebVTT captions for a video and retrieve by topic or timestamp.
-- Separate PDF and transcript retrieval tools selected by the agent.
-- Multi-turn conversations with persisted messages and bounded history.
-- PDF page and video time-range citations.
-- Asset-level and organization-level scoping in vector metadata.
-- OpenAPI documentation at `/docs`.
-
-Video understanding is transcript-based: provide a `.vtt` captions file
-when creating a video asset. This service does not perform speech-to-text
-transcription or store/play the original video.
+Standalone extraction of the LearnLens PDF/video question-answering architecture. It retains the original parsing, chunking, embedding, Weaviate retrieval, LangChain AgentExecutor, Django ORM models, and Celery ingestion. The HTTP surface is intentionally reduced to one FastAPI chat router.
 
 ## Architecture
 
-See [the architecture and code map](docs/architecture.md). The documentation
-links directly to each implementation file on GitHub so the code can be
-opened while walking through the system.
+- FastAPI: one `/api/v1/chat` endpoint.
+- PostgreSQL + Django ORM: Organization, Asset, TranscriptLine.
+- PDF: Marker JSON parsing, block-aware extraction, Chonkie SentenceChunker.
+- Video: WebVTT parsing, transcript persistence, time-window grouping, embedding-similarity boundary detection, character-based rechunking.
+- Embeddings: LangChain OpenAI embeddings.
+- Vector store: Weaviate with separate PDF and video collections.
+- Agent: LangChain tool-calling `AgentExecutor`, with PDF and transcript retrieval tools.
+- Chat memory: Redis-backed LangChain message history.
+- Ingestion: Celery PDF/video processing tasks.
 
-## Documentation
+LMS authentication, quizzes, LMS-specific fields, external status webhooks, and the original admin/router surface are excluded. Organization scoping and asset models remain.
 
-- [Documentation index](docs/README.md)
-- [Architecture and code map](docs/architecture.md)
-- [PDF ingestion and retrieval](docs/pdf-pipeline.md)
-- [Video transcript ingestion and retrieval](docs/video-pipeline.md)
-- [Agent execution and chat lifecycle](docs/agent-and-chat.md)
-- [API reference](docs/api.md)
-- [Configuration and local setup](docs/setup.md)
-- [Five-minute technical walkthrough](docs/interview-walkthrough.md)
+## Run
 
-## Run locally
+Start PostgreSQL, Weaviate, Redis, and RabbitMQ (RabbitMQ is required for Celery workers). Copy `.env.example` to `.env`, configure credentials, install with `uv sync`, initialize tables using `uv run python manage.py migrate --run-syncdb`, then start `uv run uvicorn app.main:app --reload`. API docs are at `/docs`.
 
-Requirements: Python 3.11+, an OpenAI API key, and a running Weaviate
-instance.
-
-```bash
-cp .env.example .env
-# Set OPENAI_API_KEY and Weaviate connection details in .env
-uv sync --extra dev
-uv run uvicorn app.main:app --reload
-```
-
-For local Weaviate, start the official Weaviate container separately.
-The application creates its two collections on startup.
-
-## API
-
-- `POST /api/v1/organizations` — register an organization.
-- `POST /api/v1/assets/pdf` — upload and index a PDF.
-- `POST /api/v1/assets/video-transcript` — upload a VTT transcript.
-- `POST /api/v1/assets/{asset_id}/chats` — ask a question or continue a chat.
-- `GET /api/v1/chats/{chat_id}/messages` — read conversation history.
-- `GET /health` — service health.
-
-Pass `organization_id` and `user_id` on chat requests. Asset and chat
-queries are scoped to the organization and user; do not expose these
-identifiers as authorization by themselves in a public deployment. Add
-authentication and rate limiting at the API boundary before production use.
-
-## Configuration
-
-See `.env.example`. OpenAI is used for chat and embeddings; Weaviate is
-the vector database; SQLAlchemy persists organizations, assets, chats,
-and messages. SQLite is convenient for local development. Use PostgreSQL,
-managed Weaviate, authentication, object storage, and background workers
-for a production deployment.
+Assets are created in PostgreSQL and then queued with `async_process_pdf_asset.delay(asset_id)` or `async_process_video_asset.delay(asset_id)`. Video assets require a VTT `captions_url`; speech-to-text is not included.

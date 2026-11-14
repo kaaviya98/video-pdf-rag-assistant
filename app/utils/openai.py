@@ -15,7 +15,6 @@ if TYPE_CHECKING:
     from app.models.asset import Asset
     from app.models.organization import Organization
 
-BRILLIANTPALALMS_SCOPE_KEY = "brilliantpalalms"
 DEFAULT_LLM_MODEL = "gpt-4o-mini"
 
 _OPENAI_IMAGE_MODEL_PREFIXES = (
@@ -54,12 +53,6 @@ def _default_llm_model() -> str:
 
 
 def _resolve_env_api_key(scope_key: str | None) -> str:
-    normalized_scope = (scope_key or "").strip()
-    if normalized_scope == BRILLIANTPALALMS_SCOPE_KEY:
-        return (
-            getattr(settings, "BRILLIANTPALALMS_OPENAI_API_KEY", "")
-            or settings.OPENAI_API_KEY
-        )
     return cast("str", settings.OPENAI_API_KEY)
 
 

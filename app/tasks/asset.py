@@ -7,7 +7,7 @@ from app.models.asset import Asset, AssetFileType
 from app.utils.health_checks import ping_health_check
 
 
-@shared_task(queue=settings.CELERY_LEARNLENS_GPU_QUEUE)
+@shared_task(queue=settings.CELERY_PDF_QUEUE)
 def async_process_pdf_asset(asset_id: str) -> None:
     try:
         asset = Asset.objects.get(id=asset_id)
@@ -29,7 +29,7 @@ def async_process_pdf_asset(asset_id: str) -> None:
         raise
 
 
-@shared_task(queue=settings.CELERY_LEARNLENS_CPU_QUEUE)
+@shared_task(queue=settings.CELERY_VIDEO_QUEUE)
 def async_process_video_asset(asset_id: str) -> None:
     asset: Asset | None = None
     try:
