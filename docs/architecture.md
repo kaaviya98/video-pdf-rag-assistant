@@ -4,7 +4,20 @@ This document describes the running application, the PDF/video ingestion
 pipelines, the retrieval-augmented generation (RAG) flow, and the source files
 that implement each part.
 
-## 1. Complete system architecture
+## 1. RAG pipeline overview
+
+The original LearnLens RAG pipeline is shown first to explain the core
+retrieval-augmented generation process before looking at the application
+architecture below.
+
+![LearnLens basic RAG pipeline](https://raw.githubusercontent.com/testpress/learnlens/main/docs/images/basic-rag-pipeline.webp)
+
+The high-level flow is: extract content from a PDF or video transcript,
+split it into meaningful chunks, generate embeddings, store those vectors,
+retrieve the most relevant chunks for a question, and use the language model
+to generate a grounded answer.
+
+## 2. Complete system architecture
 
 The application exposes one FastAPI chat endpoint. Django ORM owns relational
 data in PostgreSQL. Celery handles ingestion asynchronously. Weaviate stores
