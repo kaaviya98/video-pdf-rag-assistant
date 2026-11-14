@@ -10,7 +10,7 @@ dependencies = [
   "chonkie>=1.0.8", "htmltabletomd>=1.0", "beautifulsoup4>=4.13",
   "langchain>=0.3.26", "langchain-openai>=0.3.27",
   "langchain-community>=0.3.27", "langchain-core>=0.3.68",
-  "langchain-redis>=0.2.2", "langchain-weaviate>=0.0.5",
+  "langchain-redis>=0.2.2", "langchain-weaviate>=0.0.5", "langchain-google-genai>=2.0",
   "weaviate-client>=4.9,<5", "webvtt-py>=0.5.1", "shortuuid>=1.0.13", "numpy>=1.26",
   "redis>=5", "celery>=5.5", "requests>=2.32", "boto3>=1.36",
   "cryptography>=45", "sentry-sdk>=2.20"

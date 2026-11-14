@@ -17,7 +17,7 @@ def chat(payload: ChatRequest) -> ChatResponse:
             detail="Asset not found",
         ) from exc
 
-    supported_types = (AssetFileType.PDF, AssetFileType.VIDEO, AssetFileType.AUDIO)
+    supported_types = (AssetFileType.PDF, AssetFileType.VIDEO)
     if asset.file_type not in supported_types:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
