@@ -1,140 +1,178 @@
-# Architecture and code map
+# System architecture
 
-## 1. What the service does
+## End-to-end architecture
 
-The application lets a user upload a PDF or a video's WebVTT transcript,
-then ask questions grounded in that source. A tool-calling LLM chooses
-the retrieval tool appropriate to the asset. Retrieved chunks carry
-metadata used to identify the source in the response.
+This is the single system view for the standalone PDF and video RAG
+assistant. It shows both indexing paths and the shared conversational
+RAG path. The agent is created for the selected asset type, so a PDF
+chat receives the PDF retrieval tool and a video chat receives the
+transcript retrieval tool.
 
-The service is split into four responsibilities:
+```mermaid
+flowchart LR
+    U["User / Client"]
 
-- HTTP/API: validation, upload handling, request orchestration.
-- Ingestion: extract text, chunk it, attach metadata, and index it.
-- Retrieval and agent: select the right retrieval tool and synthesize an
-  answer from retrieved evidence.
-- Persistence: store organizations, assets, chats, and messages.
+    subgraph API["FastAPI application"]
+        A["Asset upload endpoints"]
+        C["Chat endpoint"]
+        V["Validate file type and size"]
+        H["Load or create conversation"]
+    end
 
-## 2. High-level architecture
+    subgraph INGEST["Ingestion pipelines"]
+        direction TB
+        PDF["PDF file"]
+        PDFP["PyMuPDF page text extraction"]
+        PDFCH["Sentence chunking + page metadata"]
+        VTT["WebVTT transcript"]
+        VTT_P["Parse and order caption cues"]
+        VTTCH["Chunk captions + time metadata"]
+    end
 
-```text
-                       Client
-                         |
-                         v
-                 FastAPI application
-                         |
-             +-----------+------------+
-             |                        |
-             v                        v
-       Asset endpoints             Chat endpoint
-             |                        |
-             v                        v
-      File validation           Load conversation
-      and local storage         and recent messages
-             |                        |
-        +----+-----+                  v
-        |          |           LangChain AgentExecutor
-        v          v                  |
-       PDF        VTT           +------+------+
-        |          |            |             |
-        v          v            v             v
-     PyMuPDF    WebVTT      PDF retrieval  Video retrieval
-        |          |            |             |
-     Chunking   Chunking         +------+------+
-        |          |                    |
-        +-----+----+                    v
-              |                    Weaviate search
-              v                         |
-       OpenAI embeddings                v
-              |                   Retrieved evidence
-              v                         |
-           Weaviate                     v
-                                  LLM final answer
-                                         |
-                                         v
-                              citations + SQL history
+    subgraph EMBED["Embedding and vector indexing"]
+        E["OpenAI embedding model"]
+        W["Weaviate vector database"]
+        PC[("PDF collection")]
+        VC[("Video transcript collection")]
+    end
+
+    subgraph CHAT["Agentic RAG chat"]
+        direction TB
+        HIST["Recent chat history"]
+        AG["LangChain tool-calling agent / AgentExecutor"]
+        SELECT{"Asset type?"}
+        PT["retrieve_from_pdf tool"]
+        VT["retrieve_from_transcript tool"]
+        PR["PDF semantic retrieval + optional page filter"]
+        VR["Transcript semantic retrieval + optional time filter"]
+        FULL["Whole-video question: read timestamped VTT transcript"]
+        LLM["OpenAI chat model"]
+        ANS["Grounded answer + source citations"]
+    end
+
+    subgraph DATA["Relational persistence"]
+        direction TB
+        DB[("SQL database")]
+        ORG["Organization and asset records"]
+        CHATDB["Chat and message history"]
+    end
+
+    U --> A
+    A --> V
+    V --> PDF
+    V --> VTT
+    PDF --> PDFP --> PDFCH
+    VTT --> VTT_P --> VTTCH
+    PDFCH --> E
+    VTTCH --> E
+    E --> PC
+    E --> VC
+    PC --- W
+    VC --- W
+
+    A --> ORG
+    ORG --> DB
+
+    U --> C
+    C --> H
+    H <--> CHATDB
+    CHATDB --> DB
+    H --> HIST
+    HIST --> AG
+    C --> AG
+    AG --> SELECT
+    SELECT -->|PDF asset| PT
+    SELECT -->|Video asset| VT
+    PT --> PR
+    PR --> PC
+    PC --> W
+    VT --> VR
+    VT --> FULL
+    VR --> VC
+    VC --> W
+    FULL --> LLM
+    PR --> LLM
+    VR --> LLM
+    AG --> LLM
+    LLM --> ANS
+    ANS --> CHATDB
+    ANS --> U
+
+    classDef api fill:#e8f0ff,stroke:#4263a5,color:#172b4d
+    classDef process fill:#e9f7ef,stroke:#39845a,color:#173b27
+    classDef store fill:#fff4cc,stroke:#b18a22,color:#46370b
+    classDef agent fill:#f1eaff,stroke:#7952a8,color:#33204a
+    class A,C,V,H api
+    class PDFP,PDFCH,VTT_P,VTTCH,E,PR,VR,FULL,LLM,ANS process
+    class W,PC,VC,DB,ORG,CHATDB store
+    class AG,SELECT,PT,VT,HIST agent
 ```
 
-## 3. Code map — open files while explaining
+## Architecture walkthrough
 
-The links below open the exact source files on the repository's main
-branch.
+### 1. Upload and indexing
 
-| Concern | File | What to explain |
+The client uploads either a PDF or a WebVTT transcript. FastAPI validates
+the upload, creates an asset record, and calls the matching ingestion
+pipeline.
+
+- **PDF RAG:** PyMuPDF extracts text page by page. Text is chunked and
+  each chunk retains its original page number.
+- **Video RAG:** WebVTT cues are parsed in chronological order. Chunks
+  retain the cue start and end times, so retrieval can refer back to a
+  point or interval in the video.
+- Both pipelines create embeddings and store vectors with
+  `asset_id`, `organization_id`, and source metadata in Weaviate.
+
+### 2. Chat and agent execution
+
+The chat endpoint checks that the asset is ready and belongs to the
+requested organization. It loads the latest 12 messages from SQL and
+passes them to the LangChain agent.
+
+The agent is configured according to the asset type:
+
+- For a PDF, it registers `retrieve_from_pdf`.
+- For a video, it registers `retrieve_from_transcript`.
+
+The model can call the registered tool to retrieve supporting context.
+The transcript tool supports semantic search, timestamp/range filters,
+and a whole-video mode that reads the stored VTT transcript. The model
+then produces an answer grounded in the retrieved content.
+
+### 3. Persistence and isolation
+
+SQLAlchemy stores organizations, assets, chats, and messages.
+Weaviate stores the embedded chunks. Retrieval filters by both
+`asset_id` and `organization_id`; chat history is scoped to the
+conversation, user, and organization.
+
+The current API accepts user and organization identifiers in request
+data. They are used for scoping, not authentication. A public deployment
+must authenticate callers and derive these identifiers from verified
+identity.
+
+## Code map — open these files during the explanation
+
+| Component in the diagram | Implementation | What to explain |
 |---|---|---|
-| FastAPI entry point and routes | [app/main.py](https://github.com/kaaviya98/video-pdf-rag-assistant/blob/main/app/main.py) | Application startup, endpoints, upload lifecycle, chat orchestration |
-| Runtime configuration | [app/config.py](https://github.com/kaaviya98/video-pdf-rag-assistant/blob/main/app/config.py) | Environment-backed settings and defaults |
-| SQLAlchemy engine/session | [app/database.py](https://github.com/kaaviya98/video-pdf-rag-assistant/blob/main/app/database.py) | Database lifecycle and request-scoped sessions |
-| Domain persistence models | [app/models.py](https://github.com/kaaviya98/video-pdf-rag-assistant/blob/main/app/models.py) | Organization, Asset, Chat, and Message relationships |
-| Request/response contracts | [app/schemas.py](https://github.com/kaaviya98/video-pdf-rag-assistant/blob/main/app/schemas.py) | Pydantic validation and API response shapes |
-| PDF/VTT ingestion | [app/ingestion.py](https://github.com/kaaviya98/video-pdf-rag-assistant/blob/main/app/ingestion.py) | Text extraction, chunking, and metadata |
-| Agent and tools | [app/agent.py](https://github.com/kaaviya98/video-pdf-rag-assistant/blob/main/app/agent.py) | Tool definitions, filters, prompt, AgentExecutor |
-| Vector database adapter | [app/vector_store.py](https://github.com/kaaviya98/video-pdf-rag-assistant/blob/main/app/vector_store.py) | Weaviate connection, embeddings, collections, vector store |
+| FastAPI application, upload and chat endpoints | [app/main.py](https://github.com/kaaviya98/video-pdf-rag-assistant/blob/main/app/main.py) | Request lifecycle, validation, orchestration, history and citations |
+| Configuration | [app/config.py](https://github.com/kaaviya98/video-pdf-rag-assistant/blob/main/app/config.py) | Environment-backed model, database and vector settings |
+| SQLAlchemy engine and sessions | [app/database.py](https://github.com/kaaviya98/video-pdf-rag-assistant/blob/main/app/database.py) | Database connection and request-scoped session |
+| Organization, asset, chat and message records | [app/models.py](https://github.com/kaaviya98/video-pdf-rag-assistant/blob/main/app/models.py) | Relational data model |
+| API request and response schemas | [app/schemas.py](https://github.com/kaaviya98/video-pdf-rag-assistant/blob/main/app/schemas.py) | Input validation and response contracts |
+| PDF and video transcript ingestion | [app/ingestion.py](https://github.com/kaaviya98/video-pdf-rag-assistant/blob/main/app/ingestion.py) | Extraction, chunking and source metadata |
+| Agent, tool registration and retrieval | [app/agent.py](https://github.com/kaaviya98/video-pdf-rag-assistant/blob/main/app/agent.py) | Tool definitions, filters, prompt and AgentExecutor |
+| Embeddings and Weaviate | [app/vector_store.py](https://github.com/kaaviya98/video-pdf-rag-assistant/blob/main/app/vector_store.py) | Embedding model, collections and vector-store adapter |
 
-## 4. Asset ingestion flow
+## Important scope notes
 
-1. The client uploads a PDF or VTT file to FastAPI.
-2. The API validates the extension and enforces the configured upload
-   size limit.
-3. The file is stored under the configured upload directory.
-4. An Asset row is created with its organization, type, source path,
-   and processing status.
-5. The matching ingestion function extracts text and splits it into
-   chunks.
-6. Each chunk is indexed with asset and organization metadata.
-7. The asset status becomes ready only after indexing succeeds.
-
-Start at [the upload routes and orchestration](https://github.com/kaaviya98/video-pdf-rag-assistant/blob/main/app/main.py)
-and follow calls into [ingestion.py](https://github.com/kaaviya98/video-pdf-rag-assistant/blob/main/app/ingestion.py)
-and [vector_store.py](https://github.com/kaaviya98/video-pdf-rag-assistant/blob/main/app/vector_store.py).
-
-## 5. Chat request flow
-
-1. The API verifies that the asset is ready and belongs to the requested
-   organization.
-2. It finds the conversation for the same asset, organization, and user,
-   or creates a new conversation.
-3. It loads the most recent 12 messages and converts them into LangChain
-   message objects.
-4. The agent is built for the asset type: PDF assets receive the PDF
-   retrieval tool; video assets receive the transcript retrieval tool.
-5. The model decides when and how to call the available tool.
-6. The tool searches only the current asset and organization.
-7. The LLM writes the final answer from retrieved material.
-8. The API stores both messages and returns the answer with citations.
-
-Code: [chat endpoint](https://github.com/kaaviya98/video-pdf-rag-assistant/blob/main/app/main.py)
-→ [agent construction](https://github.com/kaaviya98/video-pdf-rag-assistant/blob/main/app/agent.py).
-
-## 6. Isolation boundaries
-
-The vector metadata contains both `asset_id` and
-`organization_id`. Retrieval applies both filters. SQL lookups for
-assets and chats also include organization ownership; chat lookups
-include the user identifier.
-
-These identifiers are scoping inputs, not authentication. A public
-deployment must authenticate the caller and derive the user and
-organization from verified identity rather than trusting request fields.
-
-## 7. Important implementation boundaries
-
-- FastAPI owns transport concerns; the ingestion and agent code are
-  separate modules.
-- SQLAlchemy owns relational persistence.
-- Weaviate owns semantic vector search.
-- OpenAI supplies chat completions and embeddings.
-- LangChain coordinates tool selection and agent execution.
-- Video processing here means transcript ingestion and transcript
-  retrieval. It does not extract audio from a video or run ASR.
-- Whole-video questions use the stored VTT transcript as context;
-  they do not currently use generated video notes.
-
-## 8. Current limitations
-
-This is a focused proof of concept, not a production-hardened service.
-It currently uses synchronous request handlers and performs ingestion
-inside the upload request. It has no user authentication, upload object
-storage, retryable background job queue, or automated migrations.
-The chat API's citation extraction and vector-store filter behavior
-should be covered by integration tests against a live Weaviate instance.
+- Video RAG in this project is **transcript-based**. The input is a
+  WebVTT captions file; this service does not extract audio from raw
+  video or perform speech-to-text transcription.
+- Whole-video questions use the complete stored VTT transcript as
+  context. This implementation does not generate or persist video notes.
+- Ingestion currently runs synchronously in the upload request.
+- The project is a proof of concept: authentication, background workers,
+  durable object storage, database migrations and production monitoring
+  are not yet implemented.
