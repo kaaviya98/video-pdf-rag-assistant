@@ -79,7 +79,7 @@ def chat_with_asset(*, asset: Asset, query: str, conversation_id: str) -> tuple[
         with get_openai_callback():
             response = agent.invoke(
                 {"input": query},
-                config={"configurable": {"session_id": conversation_id}},
+                config={"configurable": {"session_id": f"chat_session:{asset.id}:{conversation_id}"}},
             )
 
         answer, include_citations = _clean_agent_output(
