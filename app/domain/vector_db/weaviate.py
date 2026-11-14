@@ -110,6 +110,9 @@ class WeaviateVectorDBClient(VectorDBClient):
     def is_ready(self) -> bool:
         return bool(self._weaviate.is_ready())
 
+    def collection_exists(self, name: str) -> bool:
+        return bool(self._weaviate.collections.exists(name))
+
     def create_collection(self, name: str, **kwargs: Any) -> None:
         if self._weaviate.collections.exists(name):
             error_message = f"Collection {name} already exists"
