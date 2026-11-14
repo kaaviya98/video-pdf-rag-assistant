@@ -24,6 +24,9 @@ def chat(payload: ChatRequest) -> ChatResponse:
             detail="Chat supports PDF and video assets only",
         )
 
+    if not asset.is_processed:
+        raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail="Asset ingestion is not complete")
+
     try:
         answer, citations = chat_with_asset(
             asset=asset,
