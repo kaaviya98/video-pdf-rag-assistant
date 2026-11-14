@@ -12,3 +12,4 @@ class ChatResponse(BaseModel):
     asset_id: UUID
     conversation_id: str
     answer: str
+    citations: list[dict] = Field(default_factory=list)
