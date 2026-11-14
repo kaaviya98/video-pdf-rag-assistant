@@ -25,7 +25,7 @@ vectors, Redis stores chat history, and LangChain's tool-calling
 `AgentExecutor` coordinates retrieval for each question.
 
 ```mermaid
-flowchart TB
+flowchart LR
     U[Client] --> API[FastAPI app]
     API --> CHAT[POST /api/v1/chat]
     CHAT --> ORM[Django ORM]
